@@ -13,7 +13,7 @@ namespace Sarabunari.MagicTrackpad.Editor
     static class SceneTrackpad
     {
         const string Lib = "libMagicTrackpad";
-        const int NativeVersion = 7; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
+        const int NativeVersion = 8; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
         delegate int ScrollCb(float dx, float dy, int momentum, int mods);
         delegate int PinchCb(float magnification);
         [DllImport(Lib)] static extern void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch);

@@ -11,41 +11,45 @@ typedef int (*PinchCb)(float magnification);
 static id gMonitor;
 static int gDebug;
 static PinchCb gOnPinch;
-static Method gMagnify; // -[GUIRenderView magnifyWithEvent:]
-static IMP gMagnifyOrig;
+static Method gSendEvent; // -[EditorApplicationPrincipalClass sendEvent:]
+static IMP gSendEventOrig;
 
 // Bump with any change to the exports or callback signatures. Unity keeps the
 // dylib loaded across domain reloads, so managed must check it before Init.
-int MagicTrackpad_Version(void) { return 7; }
+int MagicTrackpad_Version(void) { return 8; }
 
 void MagicTrackpad_SetDebug(int on) { gDebug = on; }
 
 void MagicTrackpad_Shutdown(void) {
     if (gMonitor) { [NSEvent removeMonitor:gMonitor]; gMonitor = nil; }
-    if (gMagnify) { method_setImplementation(gMagnify, gMagnifyOrig); gMagnify = NULL; }
+    if (gSendEvent) { method_setImplementation(gSendEvent, gSendEventOrig); gSendEvent = NULL; }
     gOnPinch = NULL;
 }
 
-// Unity's panel maximize (WindowLayout.MaximizeGestureHandler) is fed from this
-// view method and an NSEvent monitor does not stop it, so replace the method.
-static void HookMagnify(void) {
-    Method m = class_getInstanceMethod(objc_getClass("GUIRenderView"), @selector(magnifyWithEvent:));
-    if (!m) { NSLog(@"[MagicTrackpad] GUIRenderView magnifyWithEvent: not found, pinch unchanged"); return; }
+// Unity's panel maximize (WindowLayout.MaximizeGestureHandler) runs from
+// CallGlobalInputEvent inside its app delegate's sendEvent:, which the principal
+// class calls before [super sendEvent:]. NSEvent monitors and view methods only
+// run after that, so a pinch has to be taken here, at the very top.
+static void HookSendEvent(void) {
+    Method m = class_getInstanceMethod(objc_getClass("EditorApplicationPrincipalClass"), @selector(sendEvent:));
+    if (!m) { NSLog(@"[MagicTrackpad] EditorApplicationPrincipalClass sendEvent: not found, pinch unchanged"); return; }
     IMP orig = method_getImplementation(m);
-    IMP hook = imp_implementationWithBlock(^(id view, NSEvent *e) {
-        int consumed = gOnPinch && gOnPinch((float)e.magnification);
-        if (gDebug) NSLog(@"[MagicTrackpad] magnify %f consumed=%d", e.magnification, consumed);
-        if (consumed) return;
-        ((void (*)(id, SEL, NSEvent *))orig)(view, @selector(magnifyWithEvent:), e);
+    IMP hook = imp_implementationWithBlock(^(id app, NSEvent *e) {
+        if (e.type == NSEventTypeMagnify && gOnPinch) {
+            int consumed = gOnPinch((float)e.magnification);
+            if (gDebug) NSLog(@"[MagicTrackpad] magnify %f consumed=%d", e.magnification, consumed);
+            if (consumed) return;
+        }
+        ((void (*)(id, SEL, NSEvent *))orig)(app, @selector(sendEvent:), e);
     });
-    gMagnifyOrig = method_setImplementation(m, hook);
-    gMagnify = m;
+    gSendEventOrig = method_setImplementation(m, hook);
+    gSendEvent = m;
 }
 
 void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch) {
     MagicTrackpad_Shutdown();
     gOnPinch = onPinch;
-    HookMagnify();
+    HookSendEvent();
     gMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskScrollWheel handler:^NSEvent *(NSEvent *e) {
         if (gDebug) NSLog(@"[MagicTrackpad] scroll precise=%d phase=%lu momentum=%lu", e.hasPreciseScrollingDeltas,
                           (unsigned long)e.phase, (unsigned long)e.momentumPhase);
