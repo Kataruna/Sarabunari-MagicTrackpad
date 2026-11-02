@@ -1,0 +1,5 @@
+{
+  "name": "Sarabunari.MagicTrackpad.Editor",
+  "rootNamespace": "Sarabunari.MagicTrackpad.Editor",
+  "includePlatforms": ["Editor"]
+}
