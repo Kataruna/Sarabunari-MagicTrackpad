@@ -8,15 +8,14 @@ using UnityEngine;
 
 namespace Sarabunari.MagicTrackpad.Editor
 {
-    /// Two-finger scroll orbits the Scene view (Shift = pan), pinch zooms it.
+    /// Two-finger scroll orbits the Scene view (Shift = pan, Command = look), pinch zooms it.
     [InitializeOnLoad]
     static class SceneTrackpad
     {
         const string Lib = "libMagicTrackpad";
-        const int NativeVersion = 4; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
+        const int NativeVersion = 5; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
         delegate int ScrollCb(float dx, float dy, int momentum, int mods);
-        delegate int PinchCb(int type, float magnification);
-        const int Magnify = 30; // NSEventTypeMagnify
+        delegate int PinchCb(float magnification);
         [DllImport(Lib)] static extern void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch);
         [DllImport(Lib)] static extern void MagicTrackpad_Shutdown();
         [DllImport(Lib)] static extern int MagicTrackpad_Version();
@@ -76,13 +75,11 @@ namespace Sarabunari.MagicTrackpad.Editor
             {
                 var sv = Hovered;
                 if (sv == null) return 0;
-                bool shift = (mods & 1) != 0, command = (mods & 4) != 0;
-                if ((mods & 2) != 0) return 0; // Option: Unity's own behavior
-                if (sv.in2DMode && !command) return 0; // 2D has no orbit
+                if ((mods & 2) != 0 || sv.in2DMode) return 0; // Option (or 2D): Unity's own behavior
                 if (momentum != 0) return 1; // swallow inertia, it feels like drift
 
-                if (command) Zoom(sv, DragZoom(dx, dy) * (shift ? 3f : 1f) * 0.0015f);
-                else if (shift) Pan(sv, dx, dy);
+                if ((mods & 4) != 0) Look(sv, dx, dy);
+                else if ((mods & 1) != 0) Pan(sv, dx, dy);
                 else Orbit(sv, dx, dy);
                 sv.Repaint();
                 return 1;
@@ -91,26 +88,19 @@ namespace Sarabunari.MagicTrackpad.Editor
         }
 
         [AOT.MonoPInvokeCallback(typeof(PinchCb))]
-        static int OnPinch(int type, float magnification)
+        static int OnPinch(float magnification)
         {
             try
             {
                 var sv = Hovered;
                 if (sv == null) return 0;
-                if (type != Magnify) return 1; // swallow the rest so nothing maximizes the panel
                 // Spread (positive) zooms in, so the view gets closer.
-                Zoom(sv, magnification);
+                sv.size = Mathf.Max(0.001f, sv.size * Mathf.Clamp(1f - magnification * TrackpadPrefs.Zoom * TrackpadPrefs.ZoomDir, 0.1f, 10f));
                 sv.Repaint();
                 return 1;
             }
             catch (Exception e) { Debug.LogException(e); return 0; }
         }
-
-        static void Zoom(SceneView sv, float amount) =>
-            sv.size = Mathf.Max(0.001f, sv.size * Mathf.Clamp(1f - amount * TrackpadPrefs.Zoom * TrackpadPrefs.ZoomDir, 0.1f, 10f));
-
-        // Same as Alt + right-drag: dominant axis, right or up zooms in.
-        internal static float DragZoom(float dx, float dy) => Mathf.Abs(dx) > Mathf.Abs(dy) ? dx : -dy;
 
         static void Orbit(SceneView sv, float dx, float dy)
         {
@@ -118,6 +108,19 @@ namespace Sarabunari.MagicTrackpad.Editor
             var s = TrackpadPrefs.Orbit * TrackpadPrefs.OrbitDir;
             sv.LookAt(sv.pivot, OrbitRotation(sv.rotation, dx * s, dy * s), sv.size, sv.orthographic, true);
         }
+
+        // Right-drag look: the camera turns in place, so the pivot moves instead.
+        static void Look(SceneView sv, float dx, float dy)
+        {
+            if (sv.isRotationLocked) return;
+            var s = TrackpadPrefs.Orbit * TrackpadPrefs.OrbitDir;
+            var from = sv.rotation;
+            var to = OrbitRotation(from, dx * s, dy * s);
+            sv.LookAt(LookPivot(sv.pivot, from, to, sv.cameraDistance), to, sv.size, sv.orthographic, true);
+        }
+
+        internal static Vector3 LookPivot(Vector3 pivot, Quaternion from, Quaternion to, float distance) =>
+            pivot + (to * Vector3.forward - from * Vector3.forward) * distance;
 
         internal static Quaternion OrbitRotation(Quaternion r, float yaw, float pitch)
         {
@@ -164,12 +167,12 @@ namespace Sarabunari.MagicTrackpad.Editor
             guiHandler = _ =>
             {
                 EditorGUI.BeginChangeCheck();
-                Orbit = EditorGUILayout.Slider("Orbit speed", Orbit, 0.02f, 1f);
+                Orbit = EditorGUILayout.Slider("Orbit / look speed", Orbit, 0.02f, 1f);
                 Pan = EditorGUILayout.Slider("Pan speed (Shift)", Pan, 0.0002f, 0.01f);
-                Zoom = EditorGUILayout.Slider("Zoom speed (pinch, Command)", Zoom, 0.2f, 6f);
-                InvertOrbit = EditorGUILayout.Toggle("Invert orbit", InvertOrbit);
+                Zoom = EditorGUILayout.Slider("Pinch zoom speed", Zoom, 0.2f, 6f);
+                InvertOrbit = EditorGUILayout.Toggle("Invert orbit / look", InvertOrbit);
                 InvertPan = EditorGUILayout.Toggle("Invert pan", InvertPan);
-                InvertZoom = EditorGUILayout.Toggle("Invert zoom", InvertZoom);
+                InvertZoom = EditorGUILayout.Toggle("Invert pinch zoom", InvertZoom);
                 Debug = EditorGUILayout.Toggle("Log gesture events (Editor.log)", Debug);
                 if (!EditorGUI.EndChangeCheck()) return;
                 Save();

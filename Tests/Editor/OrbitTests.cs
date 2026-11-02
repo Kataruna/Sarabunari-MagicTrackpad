@@ -22,11 +22,14 @@ public class OrbitTests
         Assert.Greater(Vector3.Dot(SceneTrackpad.OrbitRotation(over, 10, 0) * Vector3.forward, over * Vector3.right), 0f);
     }
 
-    [Test] public void DragZoom_UsesDominantAxis_RightOrUpZoomsIn()
+    [Test] public void Look_KeepsCameraInPlace()
     {
-        Assert.AreEqual(5f, SceneTrackpad.DragZoom(5, 1));
-        Assert.AreEqual(5f, SceneTrackpad.DragZoom(1, -5));
-        Assert.AreEqual(-5f, SceneTrackpad.DragZoom(1, 5));
+        var pivot = new Vector3(1, 2, 3);
+        Quaternion from = Quaternion.Euler(20, 30, 0), to = Quaternion.Euler(-10, 75, 0);
+        const float d = 7f;
+        var before = pivot - from * Vector3.forward * d;
+        var after = SceneTrackpad.LookPivot(pivot, from, to, d) - to * Vector3.forward * d;
+        Assert.AreEqual(0f, (after - before).magnitude, 1e-4f);
     }
 
     [Test] public void ManySteps_StayNormalized()
