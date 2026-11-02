@@ -1,7 +1,7 @@
 {
   "name": "com.sarabunari.magictrackpad",
   "displayName": "Magic Trackpad",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "unity": "6000.3",
   "description": "macOS trackpad gestures for the Unity Scene view: two-finger scroll orbits, pinch zooms.",
   "author": { "name": "Sarabunari" }

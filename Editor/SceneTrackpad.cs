@@ -13,7 +13,7 @@ namespace Sarabunari.MagicTrackpad.Editor
     static class SceneTrackpad
     {
         const string Lib = "libMagicTrackpad";
-        const int NativeVersion = 5; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
+        const int NativeVersion = 6; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
         delegate int ScrollCb(float dx, float dy, int momentum, int mods);
         delegate int PinchCb(float magnification);
         [DllImport(Lib)] static extern void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch);
@@ -93,6 +93,7 @@ namespace Sarabunari.MagicTrackpad.Editor
             try
             {
                 var sv = Hovered;
+                if (TrackpadPrefs.Debug) Debug.Log($"[MagicTrackpad] pinch over {EditorWindow.mouseOverWindow}");
                 if (sv == null) return 0;
                 // Spread (positive) zooms in, so the view gets closer.
                 sv.size = Mathf.Max(0.001f, sv.size * Mathf.Clamp(1f - magnification * TrackpadPrefs.Zoom * TrackpadPrefs.ZoomDir, 0.1f, 10f));

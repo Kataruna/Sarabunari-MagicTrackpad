@@ -16,7 +16,7 @@ static IMP gMagnifyOrig;
 
 // Bump with any change to the exports or callback signatures. Unity keeps the
 // dylib loaded across domain reloads, so managed must check it before Init.
-int MagicTrackpad_Version(void) { return 5; }
+int MagicTrackpad_Version(void) { return 6; }
 
 void MagicTrackpad_SetDebug(int on) { gDebug = on; }
 
@@ -33,8 +33,9 @@ static void HookMagnify(void) {
     if (!m) { NSLog(@"[MagicTrackpad] GUIRenderView magnifyWithEvent: not found, pinch unchanged"); return; }
     IMP orig = method_getImplementation(m);
     IMP hook = imp_implementationWithBlock(^(id view, NSEvent *e) {
-        if (gDebug) NSLog(@"[MagicTrackpad] magnify %f", e.magnification);
-        if (gOnPinch && gOnPinch((float)e.magnification)) return;
+        int consumed = gOnPinch && gOnPinch((float)e.magnification);
+        if (gDebug) NSLog(@"[MagicTrackpad] magnify %f consumed=%d", e.magnification, consumed);
+        if (consumed) return;
         ((void (*)(id, SEL, NSEvent *))orig)(view, @selector(magnifyWithEvent:), e);
     });
     gMagnifyOrig = method_setImplementation(m, hook);
