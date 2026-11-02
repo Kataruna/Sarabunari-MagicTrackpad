@@ -25,7 +25,7 @@ Package Manager > **+** > *Add package from disk…* > pick `package.json`, or a
 "com.sarabunari.magictrackpad": "file:../../MagicTrackpad"
 ```
 
-Or from git: `"com.sarabunari.magictrackpad": "https://github.com/<you>/MagicTrackpad.git"`.
+Or from git: `"com.sarabunari.magictrackpad": "https://github.com/Kataruna/Sarabunari-MagicTrackpad.git"`.
 
 ## Rebuilding the native plugin
 
