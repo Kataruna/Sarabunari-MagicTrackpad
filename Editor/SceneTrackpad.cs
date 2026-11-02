@@ -13,7 +13,7 @@ namespace Sarabunari.MagicTrackpad.Editor
     static class SceneTrackpad
     {
         const string Lib = "libMagicTrackpad";
-        const int NativeVersion = 3; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
+        const int NativeVersion = 4; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
         delegate int ScrollCb(float dx, float dy, int momentum, int mods);
         delegate int PinchCb(int type, float magnification);
         const int Magnify = 30; // NSEventTypeMagnify
@@ -76,10 +76,14 @@ namespace Sarabunari.MagicTrackpad.Editor
             {
                 var sv = Hovered;
                 if (sv == null) return 0;
-                if ((mods & 2) != 0 || sv.in2DMode) return 0; // Option (or 2D): Unity's own behavior
+                bool shift = (mods & 1) != 0, command = (mods & 4) != 0;
+                if ((mods & 2) != 0) return 0; // Option: Unity's own behavior
+                if (sv.in2DMode && !command) return 0; // 2D has no orbit
                 if (momentum != 0) return 1; // swallow inertia, it feels like drift
 
-                if ((mods & 1) != 0) Pan(sv, dx, dy); else Orbit(sv, dx, dy);
+                if (command) Zoom(sv, DragZoom(dx, dy) * (shift ? 3f : 1f) * 0.0015f);
+                else if (shift) Pan(sv, dx, dy);
+                else Orbit(sv, dx, dy);
                 sv.Repaint();
                 return 1;
             }
@@ -95,12 +99,18 @@ namespace Sarabunari.MagicTrackpad.Editor
                 if (sv == null) return 0;
                 if (type != Magnify) return 1; // swallow the rest so nothing maximizes the panel
                 // Spread (positive) zooms in, so the view gets closer.
-                sv.size = Mathf.Max(0.001f, sv.size * Mathf.Clamp(1f - magnification * TrackpadPrefs.Zoom * TrackpadPrefs.ZoomDir, 0.1f, 10f));
+                Zoom(sv, magnification);
                 sv.Repaint();
                 return 1;
             }
             catch (Exception e) { Debug.LogException(e); return 0; }
         }
+
+        static void Zoom(SceneView sv, float amount) =>
+            sv.size = Mathf.Max(0.001f, sv.size * Mathf.Clamp(1f - amount * TrackpadPrefs.Zoom * TrackpadPrefs.ZoomDir, 0.1f, 10f));
+
+        // Same as Alt + right-drag: dominant axis, right or up zooms in.
+        internal static float DragZoom(float dx, float dy) => Mathf.Abs(dx) > Mathf.Abs(dy) ? dx : -dy;
 
         static void Orbit(SceneView sv, float dx, float dy)
         {
@@ -156,10 +166,10 @@ namespace Sarabunari.MagicTrackpad.Editor
                 EditorGUI.BeginChangeCheck();
                 Orbit = EditorGUILayout.Slider("Orbit speed", Orbit, 0.02f, 1f);
                 Pan = EditorGUILayout.Slider("Pan speed (Shift)", Pan, 0.0002f, 0.01f);
-                Zoom = EditorGUILayout.Slider("Pinch zoom speed", Zoom, 0.2f, 6f);
+                Zoom = EditorGUILayout.Slider("Zoom speed (pinch, Command)", Zoom, 0.2f, 6f);
                 InvertOrbit = EditorGUILayout.Toggle("Invert orbit", InvertOrbit);
                 InvertPan = EditorGUILayout.Toggle("Invert pan", InvertPan);
-                InvertZoom = EditorGUILayout.Toggle("Invert pinch zoom", InvertZoom);
+                InvertZoom = EditorGUILayout.Toggle("Invert zoom", InvertZoom);
                 Debug = EditorGUILayout.Toggle("Log gesture events (Editor.log)", Debug);
                 if (!EditorGUI.EndChangeCheck()) return;
                 Save();

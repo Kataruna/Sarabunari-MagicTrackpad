@@ -3,7 +3,7 @@
 #import <Cocoa/Cocoa.h>
 
 // Return 1 to consume the event (Unity never sees it), 0 to let it through.
-// mods: 1 = shift, 2 = option. type is the NSEventType of a non-scroll gesture.
+// mods: 1 = shift, 2 = option, 4 = command. type is the NSEventType of a non-scroll gesture.
 typedef int (*ScrollCb)(float dx, float dy, int momentum, int mods);
 typedef int (*PinchCb)(int type, float magnification);
 
@@ -12,7 +12,7 @@ static int gDebug;
 
 // Bump with any change to the exports or callback signatures. Unity keeps the
 // dylib loaded across domain reloads, so managed must check it before Init.
-int MagicTrackpad_Version(void) { return 3; }
+int MagicTrackpad_Version(void) { return 4; }
 
 void MagicTrackpad_SetDebug(int on) { gDebug = on; }
 
@@ -35,7 +35,8 @@ void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch) {
             BOOL touch = e.phase != NSEventPhaseNone || e.momentumPhase != NSEventPhaseNone;
             if (!e.hasPreciseScrollingDeltas || !touch) return e;
             int mods = ((e.modifierFlags & NSEventModifierFlagShift) ? 1 : 0)
-                     | ((e.modifierFlags & NSEventModifierFlagOption) ? 2 : 0);
+                     | ((e.modifierFlags & NSEventModifierFlagOption) ? 2 : 0)
+                     | ((e.modifierFlags & NSEventModifierFlagCommand) ? 4 : 0);
             return onScroll((float)e.scrollingDeltaX, (float)e.scrollingDeltaY,
                             e.momentumPhase != NSEventPhaseNone, mods) ? nil : e;
         }

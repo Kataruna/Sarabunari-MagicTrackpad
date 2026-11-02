@@ -22,6 +22,13 @@ public class OrbitTests
         Assert.Greater(Vector3.Dot(SceneTrackpad.OrbitRotation(over, 10, 0) * Vector3.forward, over * Vector3.right), 0f);
     }
 
+    [Test] public void DragZoom_UsesDominantAxis_RightOrUpZoomsIn()
+    {
+        Assert.AreEqual(5f, SceneTrackpad.DragZoom(5, 1));
+        Assert.AreEqual(5f, SceneTrackpad.DragZoom(1, -5));
+        Assert.AreEqual(-5f, SceneTrackpad.DragZoom(1, 5));
+    }
+
     [Test] public void ManySteps_StayNormalized()
     {
         var r = Quaternion.identity;
