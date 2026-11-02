@@ -19,13 +19,21 @@ are held, the first of Option, Command, Control, Shift wins.
 
 ## Install
 
-Package Manager > **+** > *Add package from disk…* > pick `package.json`, or add to `manifest.json`:
+Requires macOS and Unity 6000.3 or newer.
 
-```json
-"com.sarabunari.magictrackpad": "file:../../MagicTrackpad"
+In Unity: **Window > Package Manager > + > Add package from git URL…**, then paste:
+
+```
+https://github.com/Kataruna/Sarabunari-MagicTrackpad.git#v0.2.1
 ```
 
-Or from git: `"com.sarabunari.magictrackpad": "https://github.com/Kataruna/Sarabunari-MagicTrackpad.git"`.
+Remove `#v0.2.1` to follow the latest commit, or add this to `Packages/manifest.json`:
+
+```json
+"com.sarabunari.magictrackpad": "https://github.com/Kataruna/Sarabunari-MagicTrackpad.git#v0.2.1"
+```
+
+To work on a local copy, use *Add package from disk…* and pick `package.json`.
 
 ## Rebuilding the native plugin
 
