@@ -10,6 +10,10 @@ typedef int (*PinchCb)(int type, float magnification);
 static id gMonitor;
 static int gDebug;
 
+// Bump with any change to the exports or callback signatures. Unity keeps the
+// dylib loaded across domain reloads, so managed must check it before Init.
+int MagicTrackpad_Version(void) { return 3; }
+
 void MagicTrackpad_SetDebug(int on) { gDebug = on; }
 
 void MagicTrackpad_Shutdown(void) {
@@ -24,7 +28,12 @@ void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch) {
     gMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:mask handler:^NSEvent *(NSEvent *e) {
         if (gDebug) NSLog(@"[MagicTrackpad] type=%lu subtype=%d", (unsigned long)e.type, (int)e.subtype);
         if (e.type == NSEventTypeScrollWheel) {
-            if (!e.hasPreciseScrollingDeltas) return e; // wheel mouse: leave alone
+            if (gDebug) NSLog(@"[MagicTrackpad] scroll precise=%d phase=%lu momentum=%lu", e.hasPreciseScrollingDeltas,
+                              (unsigned long)e.phase, (unsigned long)e.momentumPhase);
+            // Smoothing tools make wheel mice report precise deltas, but only
+            // real touch scrolling carries a gesture phase.
+            BOOL touch = e.phase != NSEventPhaseNone || e.momentumPhase != NSEventPhaseNone;
+            if (!e.hasPreciseScrollingDeltas || !touch) return e;
             int mods = ((e.modifierFlags & NSEventModifierFlagShift) ? 1 : 0)
                      | ((e.modifierFlags & NSEventModifierFlagOption) ? 2 : 0);
             return onScroll((float)e.scrollingDeltaX, (float)e.scrollingDeltaY,
