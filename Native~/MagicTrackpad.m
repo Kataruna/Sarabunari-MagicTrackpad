@@ -4,7 +4,7 @@
 #import <objc/runtime.h>
 
 // Return 1 to consume the event (Unity never sees it), 0 to let it through.
-// mods: 1 = shift, 2 = option, 4 = command.
+// mods: 1 = shift, 2 = option, 4 = command, 8 = control.
 typedef int (*ScrollCb)(float dx, float dy, int momentum, int mods);
 typedef int (*PinchCb)(float magnification);
 
@@ -16,7 +16,7 @@ static IMP gMagnifyOrig;
 
 // Bump with any change to the exports or callback signatures. Unity keeps the
 // dylib loaded across domain reloads, so managed must check it before Init.
-int MagicTrackpad_Version(void) { return 6; }
+int MagicTrackpad_Version(void) { return 7; }
 
 void MagicTrackpad_SetDebug(int on) { gDebug = on; }
 
@@ -55,7 +55,8 @@ void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch) {
         if (!e.hasPreciseScrollingDeltas || !touch) return e;
         int mods = ((e.modifierFlags & NSEventModifierFlagShift) ? 1 : 0)
                  | ((e.modifierFlags & NSEventModifierFlagOption) ? 2 : 0)
-                 | ((e.modifierFlags & NSEventModifierFlagCommand) ? 4 : 0);
+                 | ((e.modifierFlags & NSEventModifierFlagCommand) ? 4 : 0)
+                 | ((e.modifierFlags & NSEventModifierFlagControl) ? 8 : 0);
         return onScroll((float)e.scrollingDeltaX, (float)e.scrollingDeltaY,
                         e.momentumPhase != NSEventPhaseNone, mods) ? nil : e;
     }];

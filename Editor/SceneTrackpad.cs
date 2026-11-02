@@ -13,7 +13,7 @@ namespace Sarabunari.MagicTrackpad.Editor
     static class SceneTrackpad
     {
         const string Lib = "libMagicTrackpad";
-        const int NativeVersion = 6; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
+        const int NativeVersion = 7; // must match MagicTrackpad_Version in Native~/MagicTrackpad.m
         delegate int ScrollCb(float dx, float dy, int momentum, int mods);
         delegate int PinchCb(float magnification);
         [DllImport(Lib)] static extern void MagicTrackpad_Init(ScrollCb onScroll, PinchCb onPinch);
@@ -75,11 +75,12 @@ namespace Sarabunari.MagicTrackpad.Editor
             {
                 var sv = Hovered;
                 if (sv == null) return 0;
-                if ((mods & 2) != 0 || sv.in2DMode) return 0; // Option (or 2D): Unity's own behavior
+                var action = TrackpadPrefs.Resolve(mods);
+                if (action == ScrollAction.UnityDefault || sv.in2DMode) return 0;
                 if (momentum != 0) return 1; // swallow inertia, it feels like drift
 
-                if ((mods & 4) != 0) Look(sv, dx, dy);
-                else if ((mods & 1) != 0) Pan(sv, dx, dy);
+                if (action == ScrollAction.Look) Look(sv, dx, dy);
+                else if (action == ScrollAction.Pan) Pan(sv, dx, dy);
                 else Orbit(sv, dx, dy);
                 sv.Repaint();
                 return 1;
@@ -103,20 +104,23 @@ namespace Sarabunari.MagicTrackpad.Editor
             catch (Exception e) { Debug.LogException(e); return 0; }
         }
 
+        static float Sign(bool invert) => invert ? -1f : 1f;
+
         static void Orbit(SceneView sv, float dx, float dy)
         {
             if (sv.isRotationLocked) return;
-            var s = TrackpadPrefs.Orbit * TrackpadPrefs.OrbitDir;
-            sv.LookAt(sv.pivot, OrbitRotation(sv.rotation, dx * s, dy * s), sv.size, sv.orthographic, true);
+            var s = TrackpadPrefs.Orbit;
+            sv.LookAt(sv.pivot, OrbitRotation(sv.rotation, dx * s * Sign(TrackpadPrefs.InvertOrbitX), dy * s * Sign(TrackpadPrefs.InvertOrbitY)),
+                sv.size, sv.orthographic, true);
         }
 
         // Right-drag look: the camera turns in place, so the pivot moves instead.
         static void Look(SceneView sv, float dx, float dy)
         {
             if (sv.isRotationLocked) return;
-            var s = TrackpadPrefs.Orbit * TrackpadPrefs.OrbitDir;
+            var s = TrackpadPrefs.Orbit;
             var from = sv.rotation;
-            var to = OrbitRotation(from, dx * s, dy * s);
+            var to = OrbitRotation(from, dx * s * Sign(TrackpadPrefs.InvertLookX), dy * s * Sign(TrackpadPrefs.InvertLookY));
             sv.LookAt(LookPivot(sv.pivot, from, to, sv.cameraDistance), to, sv.size, sv.orthographic, true);
         }
 
@@ -131,35 +135,81 @@ namespace Sarabunari.MagicTrackpad.Editor
 
         static void Pan(SceneView sv, float dx, float dy)
         {
-            var s = TrackpadPrefs.Pan * TrackpadPrefs.PanDir * sv.size;
-            sv.pivot += sv.rotation * new Vector3(-dx * s, dy * s, 0f);
+            var s = TrackpadPrefs.Pan * sv.size;
+            sv.pivot += sv.rotation * new Vector3(-dx * s * Sign(TrackpadPrefs.InvertPanX), dy * s * Sign(TrackpadPrefs.InvertPanY), 0f);
         }
     }
+
+    enum ScrollAction { Orbit, Pan, Look, UnityDefault }
 
     /// Cached: the gesture callbacks read these at trackpad event rate.
     static class TrackpadPrefs
     {
         const string K = "Sarabunari.MagicTrackpad.";
+        static bool OldInvert(string name) => EditorPrefs.GetBool(K + name, false); // pre-0.2 single toggles
+
         public static float Orbit = EditorPrefs.GetFloat(K + "orbit", 0.2f);
         public static float Pan = EditorPrefs.GetFloat(K + "pan", 0.002f);
         public static float Zoom = EditorPrefs.GetFloat(K + "zoom", 2f);
-        public static bool InvertOrbit = EditorPrefs.GetBool(K + "invertOrbit", false);
-        public static bool InvertPan = EditorPrefs.GetBool(K + "invertPan", false);
+        public static bool InvertOrbitX = EditorPrefs.GetBool(K + "invertOrbitX", OldInvert("invertOrbit"));
+        public static bool InvertOrbitY = EditorPrefs.GetBool(K + "invertOrbitY", OldInvert("invertOrbit"));
+        public static bool InvertLookX = EditorPrefs.GetBool(K + "invertLookX", OldInvert("invertOrbit"));
+        public static bool InvertLookY = EditorPrefs.GetBool(K + "invertLookY", OldInvert("invertOrbit"));
+        public static bool InvertPanX = EditorPrefs.GetBool(K + "invertPanX", OldInvert("invertPan"));
+        public static bool InvertPanY = EditorPrefs.GetBool(K + "invertPanY", OldInvert("invertPan"));
         public static bool InvertZoom = EditorPrefs.GetBool(K + "invertZoom", false);
         public static bool Debug = EditorPrefs.GetBool(K + "debug", false);
-        public static float OrbitDir => InvertOrbit ? -1f : 1f;
-        public static float PanDir => InvertPan ? -1f : 1f;
         public static float ZoomDir => InvertZoom ? -1f : 1f;
+
+        // Native modifier bit -> label, checked in this order when several keys are held.
+        static readonly (int bit, string label, ScrollAction fallback)[] s_keys =
+        {
+            (2, "Option + scroll", ScrollAction.UnityDefault),
+            (4, "Command + scroll", ScrollAction.Look),
+            (8, "Control + scroll", ScrollAction.UnityDefault),
+            (1, "Shift + scroll", ScrollAction.Pan),
+        };
+        static readonly ScrollAction[] s_bindings = LoadBindings();
+        static ScrollAction s_plain = (ScrollAction)EditorPrefs.GetInt(K + "bindPlain", (int)ScrollAction.Orbit);
+
+        static ScrollAction[] LoadBindings()
+        {
+            var b = new ScrollAction[s_keys.Length];
+            for (var i = 0; i < b.Length; i++) b[i] = (ScrollAction)EditorPrefs.GetInt(K + "bind" + s_keys[i].bit, (int)s_keys[i].fallback);
+            return b;
+        }
+
+        internal static ScrollAction Resolve(int mods) => Resolve(mods, s_bindings, s_plain);
+
+        internal static ScrollAction Resolve(int mods, ScrollAction[] bindings, ScrollAction plain)
+        {
+            for (var i = 0; i < s_keys.Length; i++)
+                if ((mods & s_keys[i].bit) != 0) return bindings[i];
+            return plain;
+        }
+
+        internal static ScrollAction[] DefaultBindings()
+        {
+            var b = new ScrollAction[s_keys.Length];
+            for (var i = 0; i < b.Length; i++) b[i] = s_keys[i].fallback;
+            return b;
+        }
 
         static void Save()
         {
             EditorPrefs.SetFloat(K + "orbit", Orbit);
             EditorPrefs.SetFloat(K + "pan", Pan);
             EditorPrefs.SetFloat(K + "zoom", Zoom);
-            EditorPrefs.SetBool(K + "invertOrbit", InvertOrbit);
-            EditorPrefs.SetBool(K + "invertPan", InvertPan);
+            EditorPrefs.SetBool(K + "invertOrbitX", InvertOrbitX);
+            EditorPrefs.SetBool(K + "invertOrbitY", InvertOrbitY);
+            EditorPrefs.SetBool(K + "invertLookX", InvertLookX);
+            EditorPrefs.SetBool(K + "invertLookY", InvertLookY);
+            EditorPrefs.SetBool(K + "invertPanX", InvertPanX);
+            EditorPrefs.SetBool(K + "invertPanY", InvertPanY);
             EditorPrefs.SetBool(K + "invertZoom", InvertZoom);
             EditorPrefs.SetBool(K + "debug", Debug);
+            EditorPrefs.SetInt(K + "bindPlain", (int)s_plain);
+            for (var i = 0; i < s_keys.Length; i++) EditorPrefs.SetInt(K + "bind" + s_keys[i].bit, (int)s_bindings[i]);
         }
 
         [SettingsProvider]
@@ -168,18 +218,36 @@ namespace Sarabunari.MagicTrackpad.Editor
             guiHandler = _ =>
             {
                 EditorGUI.BeginChangeCheck();
+
+                EditorGUILayout.LabelField("Two-finger scroll bindings", EditorStyles.boldLabel);
+                s_plain = (ScrollAction)EditorGUILayout.EnumPopup("Scroll", s_plain);
+                for (var i = 0; i < s_keys.Length; i++)
+                    s_bindings[i] = (ScrollAction)EditorGUILayout.EnumPopup(s_keys[i].label, s_bindings[i]);
+
+                EditorGUILayout.Space();
+                EditorGUILayout.LabelField("Invert", EditorStyles.boldLabel);
+                InvertOrbitX = EditorGUILayout.Toggle("Orbit horizontal", InvertOrbitX);
+                InvertOrbitY = EditorGUILayout.Toggle("Orbit vertical", InvertOrbitY);
+                InvertLookX = EditorGUILayout.Toggle("Look horizontal", InvertLookX);
+                InvertLookY = EditorGUILayout.Toggle("Look vertical", InvertLookY);
+                InvertPanX = EditorGUILayout.Toggle("Pan horizontal", InvertPanX);
+                InvertPanY = EditorGUILayout.Toggle("Pan vertical", InvertPanY);
+                InvertZoom = EditorGUILayout.Toggle("Pinch zoom", InvertZoom);
+
+                EditorGUILayout.Space();
+                EditorGUILayout.LabelField("Speed", EditorStyles.boldLabel);
                 Orbit = EditorGUILayout.Slider("Orbit / look speed", Orbit, 0.02f, 1f);
-                Pan = EditorGUILayout.Slider("Pan speed (Shift)", Pan, 0.0002f, 0.01f);
+                Pan = EditorGUILayout.Slider("Pan speed", Pan, 0.0002f, 0.01f);
                 Zoom = EditorGUILayout.Slider("Pinch zoom speed", Zoom, 0.2f, 6f);
-                InvertOrbit = EditorGUILayout.Toggle("Invert orbit / look", InvertOrbit);
-                InvertPan = EditorGUILayout.Toggle("Invert pan", InvertPan);
-                InvertZoom = EditorGUILayout.Toggle("Invert pinch zoom", InvertZoom);
+
+                EditorGUILayout.Space();
                 Debug = EditorGUILayout.Toggle("Log gesture events (Editor.log)", Debug);
+
                 if (!EditorGUI.EndChangeCheck()) return;
                 Save();
                 SceneTrackpad.SetDebug(Debug);
             },
-            keywords = new[] { "trackpad", "orbit", "pinch", "scene" }
+            keywords = new[] { "trackpad", "orbit", "pinch", "scene", "invert", "keybinding", "modifier" }
         };
     }
 }

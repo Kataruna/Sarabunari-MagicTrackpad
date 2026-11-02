@@ -32,6 +32,17 @@ public class OrbitTests
         Assert.AreEqual(0f, (after - before).magnitude, 1e-4f);
     }
 
+    [Test] public void Bindings_DefaultsAndPriority()
+    {
+        var b = TrackpadPrefs.DefaultBindings();
+        Assert.AreEqual(ScrollAction.Orbit, TrackpadPrefs.Resolve(0, b, ScrollAction.Orbit));
+        Assert.AreEqual(ScrollAction.Pan, TrackpadPrefs.Resolve(1, b, ScrollAction.Orbit));
+        Assert.AreEqual(ScrollAction.UnityDefault, TrackpadPrefs.Resolve(2, b, ScrollAction.Orbit));
+        Assert.AreEqual(ScrollAction.Look, TrackpadPrefs.Resolve(4, b, ScrollAction.Orbit));
+        Assert.AreEqual(ScrollAction.UnityDefault, TrackpadPrefs.Resolve(8, b, ScrollAction.Orbit));
+        Assert.AreEqual(ScrollAction.Look, TrackpadPrefs.Resolve(1 | 4, b, ScrollAction.Orbit)); // Command beats Shift
+    }
+
     [Test] public void ManySteps_StayNormalized()
     {
         var r = Quaternion.identity;

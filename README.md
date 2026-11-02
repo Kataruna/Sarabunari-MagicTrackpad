@@ -10,8 +10,12 @@ macOS trackpad gestures for the Unity Scene view.
 | Option + two-finger scroll | Unity's default behavior |
 | Pinch | Zoom (also stops the panel-maximize gesture) |
 
-Wheel mice and non-Scene panels are untouched. In 2D mode scroll stays Unity's; pinch still zooms. Tune speed/direction in
-**Preferences > Sarabunari > Magic Trackpad**.
+Those are the defaults. Wheel mice and non-Scene panels are untouched. In 2D mode scroll stays
+Unity's; pinch still zooms.
+
+**Preferences > Sarabunari > Magic Trackpad** sets which action each modifier triggers
+(Orbit, Pan, Look or Unity Default), per-axis inversion, and speeds. If several modifiers
+are held, the first of Option, Command, Control, Shift wins.
 
 ## Install
 
